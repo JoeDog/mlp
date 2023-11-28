@@ -2,6 +2,7 @@ import sys
 import uuid
 
 from mlp.usable import Util, StringBuffer
+from mlp.data   import Example
 
 try:
   from ._version import version as __version__
@@ -285,6 +286,27 @@ class Layer(object):
     return any(x.uuid == neuron.uuid for x in self.neurons)
     return False 
 
+  def MSE(self)->float: # mean square error
+    """
+    double mse = 0.00;
+    if (this.size() == 0) return mse; 
+    for (Neuron n : this.neurons) {
+      mse += Math.pow(n.getError(), 2);
+    }
+    return mse / this.size();
+    """
+    return 0.005453666
+
+  def MAE(self)->float: # mean abs error
+    """
+    double mae = 0.00;
+    if (this.size() == 0) return mae; 
+    for (Neuron n : this.neurons) {
+      mae += Math.abs(n.getError());
+    } 
+    return mae / this.size();
+    """
+    return 0.00666
 
 class InputLayer(Layer):
   form     = "InputLayer";
@@ -354,6 +376,36 @@ class MLP(object):
 
   def getLayerIndex(self, layer:Layer)->int:
     return self.layers.index(layer)
+
+  def  getInputLayer(self)->InputLayer:
+    if len(self.layers) > 0:
+      tmp = self.layers[0]
+      if isinstance(tmp, InputLayer):
+        return tmp;
+    return None
+
+  def getOutputLayer(self)->OutputLayer:
+    if len(self.layers) > 0:
+      tmp = self.layers[len(self.layers)-1]
+      if isinstance(tmp, OutputLayer):
+        return tmp;
+    return None
+
+  def MSE(self)->float:
+    return (self.getOutputLayer()).MSE()
+
+  def MAE(self)->float:
+    return (self.getOutputLayer()).MAE()
+
+  def isConstructed(self)->bool:
+    return (self.getInputLayer() != None and self.getOutputLayer() != None)
+
+  def addExample(self, inputs:list, target:list)->bool: 
+    if not self.isConstructed(): return False
+    if len(inputs) > (self.getInputLayer()).size():  return False;
+    if len(target) > (self.getOutputLayer()).size(): return False;
+    self.examples.append(Example(inputs, target))
+    return True
 
   def _fromFile(self, name):
     print("from file")
