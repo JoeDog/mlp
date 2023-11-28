@@ -58,22 +58,25 @@ class Factory:
 
     self._create()
 
-  def evaluate(self, val):
+  def function(self):
+    return self.form
+
+  def evaluate(self, val)->float:
     clzz = self.func[str(Type(self.form))]
     return clzz.evaluate(val) 
   
-  def derivate(self, val):
+  def derivate(self, val)->float:
     clzz = self.func[str(Type(self.form))]
     return clzz.derivate(val) 
 
   def set(self, form):
     self.form = form
 
-  def toString(self):
+  def toString(self)->str:
     clzz = self.func[str(Type(self.form))]
     return clzz
   
-  def _create(self):
+  def _create(self)->None:
     for i in range(len(list(Type))):
       name = str(Type(i))
       if i == 0:
@@ -86,88 +89,88 @@ class Factory:
 
 class Gaussian:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     d = math.pow(-val, 2);
     f = 1 / (math.exp(d));
     return f;
 
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return -2 * val * self.evaluate(val);
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Gaussian"
 
 class Heaviside:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     if val >= 0.0:
       return 1.0
     else: 
       return 0.0
 
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return 1.0
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Heaviside"
 
 class Hyperbolic:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     return math.tanh(val)
 
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return (1 - math.pow(self.evaluate(val), 2));
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Hyperbolic"
 
 class Logistic:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     return 0.0
 
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return 1.0
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Logistic"
 
 class Relu:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     return 1 / (1 + math.exp(-val))
     
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return math.exp(val) / math.pow(1 + math.exp(val), 2);
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Relu"
 
 
 class Sigmoidal:
 
-  def evaluate(self, val):
+  def evaluate(self, val:float)->float:
     e = math.exp(-val);
     return 1 / (1 + e);
 
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     e = math.exp(val);
     p = math.pow(1 + math.exp(val), 2);
     return (e/p);
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Sigmoidal"
 
 class Tahn:
 
-  def evaluate(self, val): 
+  def evaluate(self, val:float)->float: 
     return math.tanh(val);
    
-  def derivate(self, val):
+  def derivate(self, val:float)->float:
     return 1 / math.pow(math.cosh(val), 2);
 
-  def __str__(self):
+  def __str__(self)->str:
     return "Tahn"
 
 
