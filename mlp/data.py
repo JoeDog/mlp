@@ -18,9 +18,15 @@ class Range(object):
     return self._maximum
 
   def update(self, minimum, maximum):
+    tmpmin = self._minimum
+    tmpmax = self._maximum
+
     self._minimum = minimum
     self._maximum = maximum
-    self.notify()
+
+    if tmpmin != self._minimum or tmpmax != self._maximum: 
+      # We notify observers only if the values changed
+      self.notify()
 
   def register(self, observer):
     self._observers.add(observer)
@@ -34,23 +40,34 @@ class Range(object):
 
 
 class Value(object):
-  value     = 0.00
-  original  = 0.00
-  bounds    = None
+  _value     = 0.00
+  _original  = 0.00
+  _bounds    = None
+  _asbool    = False
 
-  def __init__(self, value, bounds):
-    self.original = value
-    self.bounds   = bounds
+  def __init__(self, value, bounds=Range(0, 1000), analog=False):
+    self._original = value
+    self._bounds   = bounds
     if (type(value) == bool):
-      if self.bounds.min != 0 and self.bounds.max != 1:
-        self.bounds.update(0, 1)
-      self.value = self.normalize(1.0 if (value==True) else 0.0)
+      self._bounds.update(0, 1)
+      self._asbool = True
+      self._value = self.normalize(1.0 if (value==True) else 0.0)
+    elif analog == True:
+      self._bounds.update(0, 1)
+      self._value = self.normalize(value)
     else:  
-      if value <= self.bounds.min:
-        self.bounds.update(0 if value >= 0 else value-100, self.bounds.max)
-      if value >= self.bounds.max:
-        self.bounds.update(self.bounds.min, value+100)
-      self.value = self.normalize(value);
+      if value <= self._bounds.min:
+        self._bounds.update(0 if value >= 0 else value-100, self._bounds.max)
+      if value >= self._bounds.max:
+        self._bounds.update(self._bounds.min, value+100)
+      self._value = self.normalize(value);
+
+  @property
+  def value(self):
+    if self._asbool == True:
+      return bool(self._value)
+    else:
+      return self._value
 
   def recalibrate(self)->None: 
     """
@@ -62,10 +79,10 @@ class Value(object):
     Returns:
     None               Setter method. Resets, minimum, maximum and value
     """
-    self.value = normalize(this.original);
+    self._value = normalize(this._original);
 
   def normalize(self, value:float)->float: 
-    return ((value - self.bounds.min) / (self.bounds.max - self.bounds.min))
+    return ((value - self._bounds.min) / (self._bounds.max - self._bounds.min))
 
   def denormalize(self)->float:
     """
@@ -77,17 +94,64 @@ class Value(object):
     Returns:
     result(float or bool) 
     """
-    if type(self.original) == bool:
+    if type(self._original) == bool:
       return self.original
-    return (self.value * (self.bounds.max - self.bounds.min) + self.bounds.min)
+    return (self._value * (self.bounds.max - self.bounds.min) + self.bounds.min)
 
   def toString(self)->str:
-    return "Value: min={}, max={}, value={} ({})".format(self.bounds.min, self.bounds.max, self.value, self.original)
+    return "Value: min={}, max={}, value={} ({})".format(
+      self._bounds.min, self._bounds.max, self.value, self._original
+    )
+
+class ValueBuilder(object):
+
+  @staticmethod
+  def asArray(lo:int, hi:int, multiplier=10):
+    """
+    Returns a list of Values from lo to hi. For the purposes of normalization,
+    the range is set from lo to hi*multiplier. Adjustments to the multiplier 
+    should only be necessary if you run up against the size of an int.
+
+    DataBuilder.asArray(0, 1000) returns a list of Value objects from 0 to 1000
+
+    Parameters:
+    lo (int)          The first value in the series
+    hi (int)          The last value of the series
+    multiplier(int)   The range adjustment for value normalization (default 10)
+
+    Returns:
+    list (Value)      A list of Value objects
+    """
+    r      = lo+hi
+    data   = []
+    bounds = Range(lo, hi*multiplier)
+   
+    for i in range(r):
+      data.append(Value(i, bounds))
+
+    return data 
+
+  @staticmethod
+  def asAnalog(value:float)->Value:
+    return Value(value, analog=True)
+  
+  @staticmethod
+  def asBoolean(value:bool)->Value:
+    """
+    Returns a Value object with a True (1) or False (0) normalized value
+
+    Parameters:
+    value(bool):      True or False, the value we want to store
+
+    Returns:
+    Value(object) 
+    """
+    return Value(value)
 
 class Dataset(object):
-  def __init__(self, minimum, maximum):
+  def __init__(self, minimum, maximum, multiplier=10):
     self._data   = []
-    self.bounds = Range(minimum, maximum)
+    self.bounds = Range(minimum, maximum*multiplier)
 
   def add(self, value):
     self._data.append(Value(value, self.bounds))
@@ -114,31 +178,17 @@ class Dataset(object):
 
     return DatasetIterator(self._data)
 
-class DataBuilder(object):
+class Example(object):
+  inputs = []
+  target = []
 
-  @staticmethod
-  def asArray(lo, hi, multiplier=10):
-    """
-    Returns a list of Values from lo to hi. For the purposes of normalization,
-    the range is set from lo to hi*multiplier. Adjustments to the multiplier 
-    should only be necessary if you run up against the size of an int.
+  def __init__(self, inputs:list, target:list):
+    self.inputs = inputs
+    self.target = target
 
-    DataBuilder.asArray(0, 1000) returns a list of Value objects from 0 to 1000
+  def getInputs(self)->list:
+    return self.inputs
 
-    Parameters:
-    lo (int)          The first value in the series
-    hi (int)          The last value of the series
-    multiplier(int)   The range adjustment for value normalization (default 10)
-
-    Returns:
-    list (Value)      A list of Value objects
-    """
-    r      = lo+hi
-    data   = []
-    bounds = Range(lo, hi*multiplier)
-   
-    for i in range(r):
-      data.append(Value(i, bounds))
-
-    return data 
+  def getTarget(self)->list:
+    return self.target
 
