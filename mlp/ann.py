@@ -1,8 +1,9 @@
 import sys
+import math
 import uuid
 
 from mlp.usable import Util, StringBuffer
-from mlp.data   import Example
+from mlp.data   import Example, Value, ValueBuilder
 
 try:
   from ._version import version as __version__
@@ -73,6 +74,9 @@ class Neuron(object):
 
   def getOutputConnections(self): 
     return self.output;
+
+  def getOutputValue(self)->float:
+    return self.outval if self.outval != None else 0.00
   
   def addInputsConnection(self, conn): 
     self.inputs.append(conn)
@@ -86,14 +90,58 @@ class Neuron(object):
   def getBias(self): 
     return self.bias 
 
+  def getError(self)->float:
+    return self.error if self.error != None else 0.0001
+
   def getNeuronIndex(self): 
     return self.parent.getNeuronIndex(self);
   
   def getLayerIndex(self): 
     return self.parent.getLayerIndex();
 
-  def setOutputValue(value): # XXX
-    this.outval = value.getValue() 
+  def setOutputValue(self, value):
+    self.outval = value.value 
+
+  def calculateOutput(self)->None:
+    self._calculateInput()
+    if self.parent.isFunctional():
+      self.outval = self.parent.evaluate(self.inval * self.parent.parentGain())
+
+  def calculateError(self, target:Value=None)->None:
+    if target != None:
+      # the difference between our target value and our computed value
+      self.delta = target.value - self.getOutputValue() 
+    else:
+      self.delta = 0.0;
+      for i in range(len(self.output)):
+        self.delta += (self.output[i].destinationNeuron().getError() * self.output[i].getWeight())
+    if self.parent.isFunctional(): 
+      self.error = self.delta * self.parent.parentGain() * self.parent.derivate(self.inval)
+
+    if self.parent.isFunctional():
+      self.error = self.delta * self.parent.parentGain() * self.parent.derivate(self.inval)
+      if self.error > 1.0 : self.error * 0.0001 # WTF???
+
+  def toString(self)->str:
+    sb = StringBuffer();
+    sb.append("Neuron:{}\n".format(self.uuid))
+    sb.append("  Input:  {}\n".format(self.inval))
+    sb.append("  Output: {}\n".format(self.outval))
+    sb.append("  Error:  {}\n".format(self.error))
+    sb.append("  Delta:  {}\n".format(self.delta))
+    return sb.toString()
+
+  def __str__(self)->str:
+    return self.toString()
+
+  def _calculateInput(self)->None:
+    total = 0.0;
+    for i in range(len(self.inputs)): 
+      c = self.inputs[i]
+      total += c.sourceNeuron().getOutputValue() * c.getWeight();
+    if self.bias != None:
+      total += (self.bias.getValue() * self.bias.getWeight())
+    self.inval = total
 
 class Connection(object):
   uuid     = None
@@ -120,13 +168,13 @@ class Connection(object):
     return self.uuid
 
   def sourceNeuron(self):
-    return this.nsrc
+    return self.nsrc
 
   def destinationNeuron(self):
-    return this.ndst
+    return self.ndst
 
-  def getWeight(self):
-    return self.weight
+  def getWeight(self)->float:
+    return self.weight if self.weight != None else 0.00
 
   def getIndex(self):
     return self.nsrc.getNeuronIndex()
@@ -190,7 +238,7 @@ class Layer(object):
     Returns:
     bool           True if an activation function is assocated with the network  
     """
-    return (this.func != None);
+    return (self.func != None);
 
   def evaluate(self, val:float)->float:
     return self.func.evaluate(val)
@@ -199,10 +247,10 @@ class Layer(object):
     return self.func.derivate(val)
 
   def parentGain(self)->float:
-    return this.mlp.gain
+    return self.mlp.gain
 
   def getUUID(self)->str:
-    return this.uuid
+    return self.uuid
 
   def getNeuron(self, index:int)->Neuron:
     """
@@ -256,7 +304,7 @@ class Layer(object):
     Returns:
     int              The Neuron index number, 0 for the first neuron and neurons.size()-1 for the last
     """
-    return self.neurons.index(neuron)
+    return self_.neurons.index(neuron)
 
   def getLayerIndex(self)->int:
     """
@@ -269,6 +317,9 @@ class Layer(object):
     int              The layer index, typically 0 for input and layers.size()-1 for output
     """
     return self.mlp.getLayerIndex(self);
+
+  def parentGain(self)->float:
+    return self.mlp.gain
 
   def contains(self, neuron:Neuron)->bool: 
     """
@@ -287,32 +338,28 @@ class Layer(object):
     return False 
 
   def MSE(self)->float: # mean square error
-    """
-    double mse = 0.00;
-    if (this.size() == 0) return mse; 
-    for (Neuron n : this.neurons) {
-      mse += Math.pow(n.getError(), 2);
-    }
-    return mse / this.size();
-    """
-    return 0.005453666
+    mse = 0.00
+    if self.size() == 0: return 0.00
+    for i in range(len(self.neurons)):
+      mse += math.pow(self.neurons[i].getError(), 2)
+    return mse / self.size()
 
   def MAE(self)->float: # mean abs error
-    """
-    double mae = 0.00;
-    if (this.size() == 0) return mae; 
-    for (Neuron n : this.neurons) {
-      mae += Math.abs(n.getError());
-    } 
-    return mae / this.size();
-    """
-    return 0.00666
+    mae = 0.00
+    if self.size() == 0: return 0.00
+    for i in range(len(self.neurons)):
+      mae += abs(self.neurons[i].getError())
+    return mae / self.size()
 
 class InputLayer(Layer):
   form     = "InputLayer";
+  neurons  = []
 
   def __init__(self, mlp, func=None, count=0):
     Layer.__init__(self, mlp, func, count)
+
+  def size(self)->int:
+    return 2
 
   def setInputValues(self, values:list)->bool:
     if len(values) != self.count: return False
@@ -333,6 +380,7 @@ class InputLayer(Layer):
 
 class OutputLayer(Layer):
   form     = "OutputLayer";
+  neurons  = []
 
   def __init__(self, mlp, func=None, count=0):
     Layer.__init__(self, mlp, func, count)
@@ -342,6 +390,12 @@ class OutputLayer(Layer):
     for i in range(len(self.neurons)):
       out.append(ValueBuilder.asAnalog(self.neurons[i].getOutputValue()))
     return out
+
+  def calculateTargetError(self, target:list)->bool:
+    if len(target) != self.count: return False 
+    for i in range(len(self.neurons)):
+      self.neurons[i].calculateError(target[i]);
+    return True;
  
 class MLP(object):
   eta       = 0.30;
@@ -400,11 +454,79 @@ class MLP(object):
   def isConstructed(self)->bool:
     return (self.getInputLayer() != None and self.getOutputLayer() != None)
 
+  def predict(self, values:list)->list:
+    if self._rote(values, None, False) == True:
+      return self.getOutputLayer().getOutputValues()
+    else:
+      return "HA HA!"
+
   def addExample(self, inputs:list, target:list)->bool: 
     if not self.isConstructed(): return False
     if len(inputs) > (self.getInputLayer()).size():  return False;
     if len(target) > (self.getOutputLayer()).size(): return False;
     self.examples.append(Example(inputs, target))
+    return True
+
+  def learnByExample(self, count:int)->bool:
+    orig = count
+    while count > 0:
+      i = Util.randomIndex(len(self.examples))
+      if not self.learn((self.examples[i]).getInputs(), (self.examples[i]).getTarget()):
+        return False
+      if count % 5000 == 0:
+        print("Count: {}, MSE: {}, MAE: {}".format(orig-count, self.MSE(), self.MAE()))
+      if self.MSE() <= 0.0000000000000001 and self.MAE() < 0.0000000000001:
+        print("Done: MSE: {}, MAE: {} (errors under threshold)".format(self.MSE(), self.MAE()))
+        return True;
+      count -= 1
+    print("Done: MSE: {}, MAE: {} (reps complete:{})".format(self.MSE(), self.MAE(), count))
+    return True
+
+  def learn(self, inputs:list, target:list)->bool:
+    if len(inputs) == (self.getInputLayer()).size():
+      return self._rote(inputs, target, True)
+    return False 
+
+  def _rote(self, inputs:list, target:list=None, training=False)->bool:
+    if not self.isConstructed(): return False
+    inner = self.getInputLayer()
+    if inner.setInputValues(inputs):
+      self._propagateSignal() 
+
+    if target == None: return not training
+
+    outer = self.getOutputLayer()
+    if outer.calculateTargetError(target):
+      if not training: return True
+      return self._backPropagateError()
+    return False
+  
+  def _propagateSignal(self):
+    if self.isConstructed(): 
+      level = 1
+      while level < len(self.layers):
+        neurons = self.layers[level].getNeurons()
+        for i in range(len(neurons)):
+          neurons[i].calculateOutput()
+        level += 1
+      return True
+    return False
+
+  def _backPropagateError(self)->bool:
+    if not self.isConstructed(): return False;
+
+    indx = len(self.layers)-1; 
+    bias = None
+    while indx >= 0:
+      axons = self.layers[indx].getNeurons()
+      for i in range(len(axons)):
+        if indx < len(self.layers)-1:
+          if indx > 0: axons[i].calculateError()
+          cons = axons[i].getOutputConnections()
+          for j in range(len(cons)):
+            cons[j].reweight(self.eta, self.alpha)
+          bias = axons[i].getBias()
+      indx -= 1
     return True
 
   def _fromFile(self, name):
@@ -415,7 +537,7 @@ class MLP(object):
     for i in range(len(count)):
       layer = None
       if i == 0:              # Input layer
-        layer = InputLayer(self, count[i])
+        layer = InputLayer(self, None, count[i])
       else: 
         if i == len(count)-1: # Output layer
           layer = OutputLayer(self, func, count[i])
@@ -426,6 +548,11 @@ class MLP(object):
         neurons = layer.getNeurons()
         for i in range(len(neurons)):
           Bias(neurons[i], self.bval)
+    #for i in range(len(self.layers)):
+    #  ns = self.layers[i].getNeurons()
+    #  print(self.layers[i].form)
+    #  for j in range(len(ns)):
+    #    print(ns[j].uuid)
 
   def _autoConnect(self, src:Layer, dst:Layer)->None:
     if src.uuid != dst.uuid:
