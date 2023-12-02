@@ -51,7 +51,7 @@ class Value(object):
     if (type(value) == bool):
       self._bounds.update(0, 1)
       self._asbool = True
-      self._value = self.normalize(1.0 if (value==True) else 0.0)
+      self._value = self.normalize(1.0 if value==True else 0.0)
     elif analog == True:
       self._bounds.update(0, 1)
       self._value = self.normalize(value)
@@ -64,10 +64,7 @@ class Value(object):
 
   @property
   def value(self):
-    if self._asbool == True:
-      return bool(self._value)
-    else:
-      return self._value
+    return self._value
 
   def recalibrate(self)->None: 
     """
@@ -100,7 +97,7 @@ class Value(object):
 
   def toString(self)->str:
     return "Value: min={}, max={}, value={} ({})".format(
-      self._bounds.min, self._bounds.max, self.value, self._original
+      self._bounds.min, self._bounds.max, self.value if self._asbool == False else bool(self._value), self._original
     )
 
 class ValueBuilder(object):
