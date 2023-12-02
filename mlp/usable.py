@@ -4,9 +4,13 @@ import string
 
 class Util:
 
- @staticmethod
- def randomNetworkWeight(min=-1, max=1):
-   return random.uniform(min,max)  
+  @staticmethod
+  def randomNetworkWeight(min=-1, max=1):
+    return random.uniform(min,max)  
+
+  @staticmethod
+  def randomIndex(size:int)->int:
+    return random.randint(0, size-1)
 
 class StringBuffer(object):
   """
