@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import importlib
 from   enum          import IntEnum
 
@@ -91,7 +92,7 @@ class Gaussian:
 
   def evaluate(self, val:float)->float: 
     d = math.pow(-val, 2);
-    f = 1 / (math.exp(d));
+    f = 1 / (np.exp(d));
     return f;
 
   def derivate(self, val:float)->float:
@@ -139,10 +140,10 @@ class Logistic:
 class Relu:
 
   def evaluate(self, val:float)->float: 
-    return 1 / (1 + math.exp(-val))
+    return 1 / (1 + np.exp(-val))
     
   def derivate(self, val:float)->float:
-    return math.exp(val) / math.pow(1 + math.exp(val), 2);
+    return np.exp(val) / math.pow(1 + nph.exp(val), 2);
 
   def __str__(self)->str:
     return "Relu"
@@ -151,12 +152,12 @@ class Relu:
 class Sigmoidal:
 
   def evaluate(self, val:float)->float:
-    e = math.exp(-val);
+    e = np.exp(-val);
     return 1 / (1 + e);
 
   def derivate(self, val:float)->float:
-    e = math.exp(val);
-    p = math.pow(1 + math.exp(val), 2);
+    e = np.exp(val);
+    p = math.pow(1 + np.exp(val), 2);
     return (e/p);
 
   def __str__(self)->str:
