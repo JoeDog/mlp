@@ -1,6 +1,8 @@
 import sys
 import math
 import uuid
+import json
+import numpy as np
 
 from mlp.usable import Util, StringBuffer
 from mlp.data   import Example, Value, ValueBuilder
@@ -12,10 +14,6 @@ except ImportError:
 
 
 class Bias(object):
-  neuron   = None
-  value    = 0.00
-  weight   = 0.00
-  momentum = 0.00
 
   def __init__(self, neuron, value=0.00, weight=0.00, momentum=0.00): 
     self.neuron   = neuron
@@ -24,10 +22,10 @@ class Bias(object):
     self.momentum = momentum
     self.neuron.setBias(self)
 
-  def remove(): 
+  def remove(self): 
     self.neuron.setBias(null);
 
-  def reweight(eta, alpha): 
+  def reweight(self, eta, alpha): 
     tmp           = eta * self.value * self.neuron.getError()
     self.weight  += tmp + (alpha * self.momentum)
     self.momentum = tmp
@@ -41,30 +39,25 @@ class Bias(object):
   def getWeight(self):
     return self.weight;
   
-  def asString(self):
-    return "bv: {}, bw: {}, bm: {}".format(self.value, self.weight, self.momentum)
-  
   def toString(self):
-    return "Bias(v: {} w: {} m: {})".format(self.value, self.weight, self.momentum)
+    sb  = StringBuffer()
+    sb.append("{")
+    sb.append("\"value\" : {}, \"weight\" : {}".format(self.value, self.weight))
+    sb.append("}")
+    return sb.toString()
 
 class Neuron(object):
-  parent = None 
-  bias   = None  # input bias
-  inval  = 0.0   # computed input value
-  outval = 0.0   # computed output value
-  delta  = 0.0   # computed error delta
-  error  = 0.0   # computed signal error
-  uuid   = None  # UUID identifier for the Neuron
-  inputs = []    # list of inputs connections 
-  output = []    # list of output connections
  
   def __init__(self, parent, inval=None, outval=None, delta=None, error=None): 
     self.uuid   = uuid.uuid4()
     self.parent = parent
+    self.bias   = None
     self.inval  = inval
     self.outval = outval 
     self.delta  = delta
     self.error  = error
+    self.inputs = []    # list of inputs connections 
+    self.output = []    # list of output connections
 
   def id(self):
     return str(self.uuid)
@@ -105,7 +98,14 @@ class Neuron(object):
   def calculateOutput(self)->None:
     self._calculateInput()
     if self.parent.isFunctional():
-      self.outval = self.parent.evaluate(self.inval * self.parent.parentGain())
+      tmpval =  self.parent.evaluate(self.inval * self.parent.parentGain())
+      if tmpval < 0.0:
+        self.outval = 0.0
+      elif tmpval > 1.0:
+        self.outval = 1.0
+      else: 
+        self.outval = tmpval
+       
 
   def calculateError(self, target:Value=None)->None:
     if target != None:
@@ -123,13 +123,11 @@ class Neuron(object):
       if self.error > 1.0 : self.error * 0.0001 # WTF???
 
   def toString(self)->str:
-    sb = StringBuffer();
-    sb.append("Neuron:{}\n".format(self.uuid))
-    sb.append("  Input:  {}\n".format(self.inval))
-    sb.append("  Output: {}\n".format(self.outval))
-    sb.append("  Error:  {}\n".format(self.error))
-    sb.append("  Delta:  {}\n".format(self.delta))
-    return sb.toString()
+    sb = StringBuffer()
+    sb.append("\"bias\" :  {}".format("null" if self.bias == None else self.bias.toString()))
+    #for conn in self.getInputConnections():
+    #   jsn['conn'].append(conn.toString())
+    return sb.toString() 
 
   def __str__(self)->str:
     return self.toString()
@@ -138,26 +136,22 @@ class Neuron(object):
     total = 0.0;
     for i in range(len(self.inputs)): 
       c = self.inputs[i]
-      total += c.sourceNeuron().getOutputValue() * c.getWeight();
+      total += float(c.sourceNeuron().getOutputValue()) * c.getWeight();
     if self.bias != None:
       total += (self.bias.getValue() * self.bias.getWeight())
     self.inval = total
 
 class Connection(object):
-  uuid     = None
-  weight   = 0.0;
-  momentum = 0.0  
-  nsrc     = None # source neuron
-  ndst     = None # destination neuron
 
   def __init__(self, src, dst, weight=Util.randomNetworkWeight()): 
     src.addOutputConnection(self)
     dst.addInputsConnection(self)
 
-    self.uuid   = uuid.uuid4()
-    self.nsrc   = src
-    self.ndst   = dst
-    self.weight = weight
+    self.uuid     = uuid.uuid4()
+    self.nsrc     = src
+    self.ndst     = dst
+    self.weight   = weight
+    self.momentum = 0.0  
 
   def reweight(self, eta, alpha):
     tmp            = (eta * self.nsrc.getOutputValue() * self.ndst.getError());
@@ -182,23 +176,27 @@ class Connection(object):
   def getLayerIndex(self):
     return self.nsrc.getLayerIndex()
 
-  def toString(self):
-    return self.getUUID()
+  def toString(self)->str:
+    jsn = {
+      "layersrc"   : self.nsrc.parent.getLayerIndex(),
+      "neuronsrc"  : self.nsrc.getNeuronIndex(),
+      "weight"     : self.weight
+    }
+    return json.dumps(jsn)
+
+  def __str__(self)->str:
+    return self.toString()
 
 
 class Layer(object):
-  mlp      = None
-  uuid     = None
-  count    = 0 
-  func     = None
-  neurons  = []
-  form     = "HiddenLayer";
 
   def __init__(self, mlp, func=None, count=0):
     self.mlp      = mlp;
     self.func     = func;
     self.uuid     = uuid.uuid4()
     self.count    = count;
+    self.neurons  = []
+    self.form     = "HiddenLayer";
     self.mlp.addLayer(self);
 
     for i in range(self.count):
@@ -211,6 +209,9 @@ class Layer(object):
   #@XmlAttribute(name="function") 
   def getFunction(self)->int:
     return -1 if not self.isFunctional() else self.func.function()
+
+  def getFunctionName(self)->int:
+    return "UNKNOWN" if not self.isFunctional() else str(self.func) #.toString()
 
   #@XmlAttribute(name="count")
   def getCount()->int:
@@ -304,7 +305,7 @@ class Layer(object):
     Returns:
     int              The Neuron index number, 0 for the first neuron and neurons.size()-1 for the last
     """
-    return self_.neurons.index(neuron)
+    return self.neurons.index(neuron)
 
   def getLayerIndex(self)->int:
     """
@@ -351,12 +352,34 @@ class Layer(object):
       mae += abs(self.neurons[i].getError())
     return mae / self.size()
 
+  def toString(self)->str:
+    #sb = StringBuffer();
+    #sb.append("{} Size: {} ({})\n".format(self.form, self.count, len(self.neurons)))
+    #for i in range(len(self.neurons)):
+    #  sb.append(str(self.neurons[i]))
+    #return sb.toString()
+    jsn = {
+      "name"     : self.form,
+      "function" : self.getFunctionName(),
+      "neurons"  : []
+    }
+    for neuron in self.neurons:
+      jsn['neurons'].append(neuron.toString())
+    return json.dumps(jsn)
+
+  def __str__(self)->str:
+    return self.toString()
+
+
 class InputLayer(Layer):
-  form     = "InputLayer";
-  neurons  = []
 
   def __init__(self, mlp, func=None, count=0):
     Layer.__init__(self, mlp, func, count)
+    self.uuid = uuid.uuid4()
+    self.form = "InputLayer";
+
+  def getNeurons(self):
+    return self.neurons
 
   def size(self)->int:
     return 2
@@ -368,22 +391,25 @@ class InputLayer(Layer):
       (self.neurons[i]).setOutputValue(values[i])
     return True
 
-  def toString(self)->str:
-    sb = StringBuffer();
-    sb.append("{} Size: {} ({})\n".format(self.form, self.count, len(self.neurons)))
-    for i in range(len(self.neurons)):
-      sb.append(str(self.neurons[i]))
-    return sb.toString()
-
-  def __str__(self)->str:
-    return self.toString()
+  #def toString(self)->str:
+  #  sb = StringBuffer();
+  #  sb.append("{} Size: {} ({})\n".format(self.form, self.count, len(self.neurons)))
+  #  for i in range(len(self.neurons)):
+  #    sb.append(str(self.neurons[i]))
+  #  return sb.toString()
+  #
+  #  def __str__(self)->str:
+  #    return self.toString()
 
 class OutputLayer(Layer):
-  form     = "OutputLayer";
-  neurons  = []
 
   def __init__(self, mlp, func=None, count=0):
     Layer.__init__(self, mlp, func, count)
+    self.uuid = uuid.uuid4()
+    self.form = "OutputLayer";
+
+  def getNeurons(self):
+    return self.neurons
 
   def getOutputValues(self)->list:
     out = []
@@ -398,28 +424,25 @@ class OutputLayer(Layer):
     return True;
  
 class MLP(object):
-  eta       = 0.30;
-  alpha     = 0.75;
-  gain      = 0.99;
-  mae       = 0.02;
-  bval      = 1.0;
   layers    = [];
   examples  = [];
-  _instance = None
 
-  def __new__(cls, arg, func=None, auto=True):
-    # Singleton
-    if cls._instance is None:
-      cls._instance = super(MLP, cls).__new__(cls)
-      if type(arg) == str:
-        cls._instance._fromFile(arg)
-      elif type(arg) == list:
-        cls._instance._fromArgs(arg, func, auto)
-      else:
-       print("Instantiate from a file or configure with arguments:\n  MLP('filename')\n  MLP([2,2,1], function, True)")
-       sys.exit(1)
+  def __init__(self, arg, func=None, auto=True):
+    self.eta      = 0.30
+    self.alpha    = 0.75
+    self.gain     = 0.99
+    self.mae      = 0.02
+    self.bval     = 1.0
+    self.layers   = []  
+    self.examples = []
 
-    return cls._instance
+    if type(arg) == str:
+      self._fromFile(arg)
+    elif type(arg) == list:
+      self._fromArgs(arg, func, auto)
+    else:
+      print("Instantiate from a file or configure with arguments:\n  MLP('filename')\n  MLP([2,2,1], function, True)")
+      sys.exit(1)
 
   def addLayer(self, layer): 
     self.layers.append(layer)
@@ -475,7 +498,7 @@ class MLP(object):
         return False
       if count % 5000 == 0:
         print("Count: {}, MSE: {}, MAE: {}".format(orig-count, self.MSE(), self.MAE()))
-      if self.MSE() <= 0.0000000000000001 and self.MAE() < 0.0000000000001:
+      if self.MSE() <= 0.0000000000000001 and self.MAE() < 0.0000000000000001:
         print("Done: MSE: {}, MAE: {} (errors under threshold)".format(self.MSE(), self.MAE()))
         return True;
       count -= 1
@@ -526,6 +549,8 @@ class MLP(object):
           for j in range(len(cons)):
             cons[j].reweight(self.eta, self.alpha)
           bias = axons[i].getBias()
+          if bias != None:
+            bias.reweight(self.eta, self.alpha)
       indx -= 1
     return True
 
@@ -555,11 +580,54 @@ class MLP(object):
     #    print(ns[j].uuid)
 
   def _autoConnect(self, src:Layer, dst:Layer)->None:
-    if src.uuid != dst.uuid:
-      srcNeurons = src.getNeurons()
-      dstNeurons = dst.getNeurons()
-      for i in range(len(srcNeurons)):
-        for j in range(len(dstNeurons)):
-          Connection(srcNeurons[i], dstNeurons[j])
+    if src and dst and src.uuid != dst.uuid:
+      for nsrc in src.neurons: 
+        for ndst in dst.neurons: 
+          Connection(nsrc, ndst)          
 
-
+  def save(self, name):
+    res = {
+      'eta'      : self.eta,
+      'alpha'    : self.alpha,
+      'gain'     : self.gain,
+      'layers'   : []
+    }
+    layr = {
+      'name'     : None,
+      'function' : None,
+      'neurons'  : []
+    }
+    bias = {
+      'value'    : None,
+      'weight'   : None
+    }
+    nurn = {
+      'bias'     : None,
+      'conn'     : []
+    }
+    for layer in self.layers:
+      layr['name'] = layer.form
+      layr['function'] = layer.getFunctionName()
+      for neuron in layer.getNeurons():
+        b = neuron.getBias()
+        bias = {'value':b.value, 'weight':b.weight} if b != None else {'value':None, 'weight':None}
+        nurn = {
+          'bias'   : bias,
+          'conn'   : []
+        }
+        for c in neuron.getInputConnections():
+          nurn['conn'].append({
+            "srcLayer"   : c.nsrc.parent.getLayerIndex(),
+            "srcNeuron"  : c.nsrc.getNeuronIndex(),
+            "weight"     : c.weight
+          })
+        res['layers'].append(nurn)   
+    try:
+      jsn  = json.dumps(res)
+      out = open(name, 'wt')
+      out.write(jsn)
+      out.close()
+    except Exception as error:
+      print(error) 
+      return False
+    return True
